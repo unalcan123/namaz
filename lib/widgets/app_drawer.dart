@@ -5,6 +5,7 @@ import '../features/locations/presentation/recent_locations_page.dart';
 import '../features/settings/presentation/mode_controller.dart';
 import '../features/settings/presentation/settings_page.dart';
 import '../features/settings/presentation/slide_settings_page.dart';
+import '../features/settings/presentation/bg_music_settings_page.dart';
 
 class AppDrawer extends ConsumerWidget {
   const AppDrawer({super.key});
@@ -23,7 +24,7 @@ class AppDrawer extends ConsumerWidget {
               color: theme.colorScheme.primary.withValues(alpha: 0.8),
             ),
             child: Text(
-              'Ezan Vakti',
+              'Ana Sayfa',
               style: theme.textTheme.headlineSmall?.copyWith(color: Colors.white),
             ),
           ),
@@ -65,6 +66,17 @@ class AppDrawer extends ConsumerWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const SlideSettingsPage()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.music_note_outlined),
+            title: const Text('Arka Plan Müziği'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const BgMusicSettingsPage()),
               );
             },
           ),

@@ -21,6 +21,8 @@ class AlertSettingsNotifier extends StateNotifier<AlertSettings> {
   static const _keySlideDuration = 'slide_duration';
   static const _keySlideCategory = 'slide_category';
   static const _keyUserCategories = 'user_categories';
+  static const _keyBgMusicPath = 'bg_music_path';
+  static const _keyBgMusicEnabled = 'bg_music_enabled';
   void touchLastUpdate() {
     state = state.copyWith(lastUpdate: DateTime.now().millisecondsSinceEpoch);
   }
@@ -52,6 +54,8 @@ class AlertSettingsNotifier extends StateNotifier<AlertSettings> {
       slideDuration: prefs.getInt(_keySlideDuration) ?? 15,
       slideCategory: prefs.getString(_keySlideCategory) ?? 'resim',
       userCategories: userCats,
+      bgMusicPath: prefs.getString(_keyBgMusicPath),
+      bgMusicEnabled: prefs.getBool(_keyBgMusicEnabled) ?? false,
     );
   }
 
@@ -161,5 +165,26 @@ class AlertSettingsNotifier extends StateNotifier<AlertSettings> {
     }
 
     state = state.copyWith(userCategories: newCats, slideCategory: newCategory);
+  }
+
+  // ✅ Arka plan müzik yolu ayarla
+  Future<void> setBgMusicPath(String? path) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (path != null) {
+      await prefs.setString(_keyBgMusicPath, path);
+    } else {
+      await prefs.remove(_keyBgMusicPath);
+    }
+    state = state.copyWith(
+      bgMusicPath: path,
+      clearBgMusicPath: path == null,
+    );
+  }
+
+  // ✅ Arka plan müzik aç/kapat
+  Future<void> toggleBgMusic(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyBgMusicEnabled, value);
+    state = state.copyWith(bgMusicEnabled: value);
   }
 }

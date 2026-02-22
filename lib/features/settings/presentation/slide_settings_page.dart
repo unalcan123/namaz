@@ -11,7 +11,7 @@ import 'package:flutter_exif_rotation/flutter_exif_rotation.dart';
 import '../data/alert_settings.dart';
 import 'alert_settings_controller.dart';
 import 'dart:convert';
-import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:hive_flutter/hive_flutter.dart';
 
 /// ✅ GÖRSEL İŞLEME YARDIMCISI (TV İÇİN NORMALLEŞTİRME)
@@ -206,18 +206,37 @@ class SlideSettingsPage extends ConsumerWidget {
     return 'userImages_$cat';
   }
 
-  Future<void> addUserImagesWeb(WidgetRef ref) async {
+  Future<void> addUserImagesWeb(BuildContext context, WidgetRef ref) async {
     final settings = ref.read(alertSettingsProvider);
-    final category = settings.slideCategory;
+    final fullMap = _getFullCategoryMap(settings);
+
+    // ✅ Kategori seçme dialogu
+    final String? selectedKey = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        scrollable: true,
+        title: const Text('Kategori Seçin'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: fullMap.entries
+              .map((e) => ListTile(
+                    title: Text(e.value),
+                    onTap: () => Navigator.pop(context, e.key),
+                  ))
+              .toList(),
+        ),
+      ),
+    );
+    if (selectedKey == null) return;
 
     final result = await FilePicker.platform.pickFiles(
       type: FileType.image,
       allowMultiple: true,
-      withData: true, // ✅ web için bytes şart
+      withData: true, // ✅ Web'de bytes zorunlu
     );
     if (result == null) return;
 
-    final key = _webKey(category);
+    final key = _webKey(selectedKey);
     final List existing = (_webBox.get(key) as List?) ?? [];
 
     for (final f in result.files) {
@@ -227,8 +246,6 @@ class SlideSettingsPage extends ConsumerWidget {
     }
 
     await _webBox.put(key, existing);
-
-    // ✅ SlaytWidget yeniden yüklesin diye lastUpdate'ı tetikle (senin provider'ına göre)
     ref.read(alertSettingsProvider.notifier).touchLastUpdate();
   }
   static const Map<String, String> defaultCategoryMap = {
@@ -248,6 +265,7 @@ class SlideSettingsPage extends ConsumerWidget {
   String _getInternalDir(String key) => key == 'Kullanıcı Foto' ? 'user' : key;
 
   @override
+
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(alertSettingsProvider);
     final alertController = ref.read(alertSettingsProvider.notifier);
@@ -315,7 +333,7 @@ class SlideSettingsPage extends ConsumerWidget {
                   subtitle: const Text('Seçilenleri TV formatına uygun ekler'),
                   onTap: () async {
                     if (kIsWeb) {
-                      await addUserImagesWeb(ref); // ✅ artık burada var
+                      await addUserImagesWeb(context, ref);
                       if (context.mounted) Navigator.pop(context);
                     } else {
                       await _pickUserImageWithCategory(context, ref);
@@ -323,7 +341,6 @@ class SlideSettingsPage extends ConsumerWidget {
                     }
                   },
                 ),
-
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.auto_fix_high, color: Colors.blue),
@@ -357,6 +374,7 @@ class SlideSettingsPage extends ConsumerWidget {
               ],
             ),
           ),
+
           if (settings.userCategories.isNotEmpty) ...[
             const SizedBox(height: 24),
             Padding(
@@ -541,9 +559,12 @@ class UserImageManagerSheet extends ConsumerStatefulWidget {
 }
 
 class _UserImageManagerSheetState extends ConsumerState<UserImageManagerSheet> {
+  // Native: dosya yolları | Web: base64 string'ler
   List<String> userImages = [];
   bool isLoading = true;
   String currentCategoryKey = 'resim';
+
+  Box get _webBox => Hive.box('web_user_images');
 
   @override
   void initState() {
@@ -554,24 +575,53 @@ class _UserImageManagerSheetState extends ConsumerState<UserImageManagerSheet> {
 
   String _getInternalDir(String key) => key == 'Kullanıcı Foto' ? 'user' : key;
 
+  String _webKey(String category) {
+    final cat = category == 'Kullanıcı Foto'
+        ? 'user'
+        : category == 'Genel Resimler'
+            ? 'resim'
+            : category == 'Hadis-i Şerifler'
+                ? 'hadis'
+                : category == 'Dualar'
+                    ? 'dua'
+                    : category == 'Besmele'
+                        ? 'besmele'
+                        : category == 'Namaz Bilgileri'
+                            ? 'namaz'
+                            : category == 'Ramazan'
+                                ? 'ramazan'
+                                : category;
+    return 'userImages_$cat';
+  }
+
   Future<void> _loadUserImages() async {
     setState(() => isLoading = true);
-    final appDir = await getApplicationDocumentsDirectory();
-    final internalDir = _getInternalDir(currentCategoryKey);
-    final categoryDir = Directory('${appDir.path}/userImages/$internalDir');
 
-    if (await categoryDir.exists()) {
-      userImages = categoryDir
-          .listSync()
-          .where((f) =>
-      f.path.toLowerCase().endsWith('.jpg') ||
-          f.path.toLowerCase().endsWith('.jpeg') ||
-          f.path.toLowerCase().endsWith('.png'))
-          .map((f) => f.path)
-          .toList();
+    if (kIsWeb) {
+      // ✅ Web: Hive'dan base64 listesi oku
+      final key = _webKey(currentCategoryKey);
+      final List raw = (_webBox.get(key) as List?) ?? [];
+      userImages = raw.cast<String>();
     } else {
-      userImages = [];
+      // ✅ Native: dosya sistemi
+      final appDir = await getApplicationDocumentsDirectory();
+      final internalDir = _getInternalDir(currentCategoryKey);
+      final categoryDir = Directory('${appDir.path}/userImages/$internalDir');
+
+      if (await categoryDir.exists()) {
+        userImages = categoryDir
+            .listSync()
+            .where((f) =>
+                f.path.toLowerCase().endsWith('.jpg') ||
+                f.path.toLowerCase().endsWith('.jpeg') ||
+                f.path.toLowerCase().endsWith('.png'))
+            .map((f) => f.path)
+            .toList();
+      } else {
+        userImages = [];
+      }
     }
+
     if (mounted) setState(() => isLoading = false);
   }
 
@@ -624,91 +674,135 @@ class _UserImageManagerSheetState extends ConsumerState<UserImageManagerSheet> {
                 child: isLoading
                     ? const Center(child: CircularProgressIndicator())
                     : userImages.isEmpty
-                    ? const Center(child: Text("Hiç fotoğraf yok.", style: TextStyle(color: Colors.white)))
-                    : GridView.builder(
-                  controller: controller,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 10,
-                  ),
-                  itemCount: userImages.length,
-                  itemBuilder: (context, index) {
-                    final imagePath = userImages[index];
-                    return Stack(
-                      children: [
-                        Positioned.fill(
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.file(
-                              File(imagePath),
-                              fit: BoxFit.cover,
-                              key: ValueKey('${imagePath}_${settings.lastUpdate}'),
+                        ? const Center(
+                            child: Text('Hiç fotoğraf yok.',
+                                style: TextStyle(color: Colors.white)))
+                        : GridView.builder(
+                            controller: controller,
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 3,
+                              crossAxisSpacing: 10,
+                              mainAxisSpacing: 10,
                             ),
+                            itemCount: userImages.length,
+                            itemBuilder: (context, index) {
+                              final item = userImages[index];
+                              return Stack(
+                                children: [
+                                  Positioned.fill(
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      // ✅ Web: base64 | Native: dosya
+                                      child: kIsWeb
+                                          ? Image.memory(
+                                              base64Decode(item),
+                                              fit: BoxFit.cover,
+                                              key: ValueKey(
+                                                  '${index}_${settings.lastUpdate}'),
+                                            )
+                                          : Image.file(
+                                              File(item),
+                                              fit: BoxFit.cover,
+                                              key: ValueKey(
+                                                  '${item}_${settings.lastUpdate}'),
+                                            ),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    top: 4,
+                                    right: 4,
+                                    child: Row(
+                                      children: [
+                                        if (!kIsWeb) ...[
+                                          // 🔄 SAĞA DÖNDÜR (sadece native)
+                                          GestureDetector(
+                                            onTap: () async {
+                                              await ImageTvFixer
+                                                  .rotateFile90Degrees(item);
+                                              ref
+                                                  .read(alertSettingsProvider
+                                                      .notifier)
+                                                  .triggerRefresh();
+                                              _loadUserImages();
+                                            },
+                                            child: Container(
+                                              decoration: const BoxDecoration(
+                                                color: Colors.blueAccent,
+                                                shape: BoxShape.circle,
+                                              ),
+                                              padding: const EdgeInsets.all(6),
+                                              child: const Icon(
+                                                  Icons.rotate_right,
+                                                  color: Colors.white,
+                                                  size: 18),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          // 🔄 SOLA DÖNDÜR (sadece native)
+                                          GestureDetector(
+                                            onTap: () async {
+                                              await ImageTvFixer
+                                                  .rotateFileMinus90Degrees(
+                                                      item);
+                                              ref
+                                                  .read(alertSettingsProvider
+                                                      .notifier)
+                                                  .triggerRefresh();
+                                              _loadUserImages();
+                                            },
+                                            child: Container(
+                                              decoration: const BoxDecoration(
+                                                color: Colors.blueAccent,
+                                                shape: BoxShape.circle,
+                                              ),
+                                              padding: const EdgeInsets.all(6),
+                                              child: const Icon(
+                                                  Icons.rotate_left,
+                                                  color: Colors.white,
+                                                  size: 18),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                        ],
+                                        // 🗑 SİL
+                                        GestureDetector(
+                                          onTap: () async {
+                                            if (kIsWeb) {
+                                              // ✅ Web: Hive listesinden çıkar
+                                              final key =
+                                                  _webKey(currentCategoryKey);
+                                              final List raw =
+                                                  (_webBox.get(key) as List?) ??
+                                                      [];
+                                              raw.removeAt(index);
+                                              await _webBox.put(key, raw);
+                                            } else {
+                                              await File(item).delete();
+                                            }
+                                            ref
+                                                .read(alertSettingsProvider
+                                                    .notifier)
+                                                .triggerRefresh();
+                                            _loadUserImages();
+                                          },
+                                          child: Container(
+                                            decoration: const BoxDecoration(
+                                              color: Colors.black54,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            padding: const EdgeInsets.all(6),
+                                            child: const Icon(Icons.delete,
+                                                color: Colors.white, size: 18),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           ),
-                        ),
-                        Positioned(
-                          top: 4,
-                          right: 4,
-                          child: Row(
-                            children: [
-                              // 🔄 SAĞA DÖNDÜR
-                              GestureDetector(
-                                onTap: () async {
-                                  await ImageTvFixer.rotateFile90Degrees(imagePath);
-                                  ref.read(alertSettingsProvider.notifier).triggerRefresh();
-                                  _loadUserImages();
-                                },
-                                child: Container(
-                                  decoration: const BoxDecoration(
-                                    color: Colors.blueAccent,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  padding: const EdgeInsets.all(6),
-                                  child: const Icon(Icons.rotate_right, color: Colors.white, size: 18),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              // 🔄 SOLA DÖNDÜR
-                              GestureDetector(
-                                onTap: () async {
-                                  await ImageTvFixer.rotateFileMinus90Degrees(imagePath);
-                                  ref.read(alertSettingsProvider.notifier).triggerRefresh();
-                                  _loadUserImages();
-                                },
-                                child: Container(
-                                  decoration: const BoxDecoration(
-                                    color: Colors.blueAccent,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  padding: const EdgeInsets.all(6),
-                                  child: const Icon(Icons.rotate_left, color: Colors.white, size: 18),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              // 🗑 SİL
-                              GestureDetector(
-                                onTap: () async {
-                                  await File(imagePath).delete();
-                                  ref.read(alertSettingsProvider.notifier).triggerRefresh();
-                                  _loadUserImages();
-                                },
-                                child: Container(
-                                  decoration: const BoxDecoration(
-                                    color: Colors.black54,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  padding: const EdgeInsets.all(6),
-                                  child: const Icon(Icons.delete, color: Colors.white, size: 18),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
               ),
             ],
           ),

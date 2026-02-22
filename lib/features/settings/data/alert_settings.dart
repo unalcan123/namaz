@@ -18,6 +18,8 @@ class AlertSettings {
   final String slideCategory; 
   final int lastUpdate; 
   final Map<String, String> userCategories;
+  final String? bgMusicPath;
+  final bool bgMusicEnabled;
 
   AlertSettings({
     Map<String, bool>? prayerAlarms,
@@ -29,6 +31,8 @@ class AlertSettings {
     this.slideCategory = 'resim',
     this.lastUpdate = 0,
     this.userCategories = const {},
+    this.bgMusicPath,
+    this.bgMusicEnabled = false,
   })  : prayerAlarms = prayerAlarms ?? {for (var v in prayerNames) v: false},
         preNotifications = preNotifications ?? {for (var m in preNotificationMinutes) m: false};
 
@@ -50,6 +54,9 @@ class AlertSettings {
     String? slideCategory,
     int? lastUpdate,
     Map<String, String>? userCategories,
+    String? bgMusicPath,
+    bool clearBgMusicPath = false,
+    bool? bgMusicEnabled,
   }) {
     return AlertSettings(
       prayerAlarms: prayerAlarms ?? this.prayerAlarms,
@@ -61,6 +68,8 @@ class AlertSettings {
       slideCategory: slideCategory ?? this.slideCategory,
       lastUpdate: lastUpdate ?? this.lastUpdate,
       userCategories: userCategories ?? this.userCategories,
+      bgMusicPath: clearBgMusicPath ? null : (bgMusicPath ?? this.bgMusicPath),
+      bgMusicEnabled: bgMusicEnabled ?? this.bgMusicEnabled,
     );
   }
 }
