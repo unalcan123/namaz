@@ -20,6 +20,9 @@ class AlertSettings {
   final Map<String, String> userCategories;
   final String? bgMusicPath;
   final bool bgMusicEnabled;
+  // AlertSettings içine ekle
+  final List<String> bgMusicPaths; // ✅ çoklu
+// Eski bgMusicPath'i istersen geriye uyumluluk için tutabilirsin ama artık gerek yok.
 
   AlertSettings({
     Map<String, bool>? prayerAlarms,
@@ -30,6 +33,9 @@ class AlertSettings {
     this.slideDuration = 15,
     this.slideCategory = 'resim',
     this.lastUpdate = 0,
+
+    this.bgMusicPaths = const [],
+
     this.userCategories = const {},
     this.bgMusicPath,
     this.bgMusicEnabled = false,

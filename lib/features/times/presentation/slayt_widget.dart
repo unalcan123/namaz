@@ -357,6 +357,7 @@ class _SlaytWidgetState extends ConsumerState<SlaytWidget> {
           width: double.infinity,
           height: actualHeight,
           child: Stack(
+            clipBehavior: Clip.none,
             children: [
               Positioned.fill(child: content),
               // ✅ Tam ekran butonu
@@ -364,24 +365,28 @@ class _SlaytWidgetState extends ConsumerState<SlaytWidget> {
                 Positioned(
                   right: 12,
                   bottom: 12,
-                  child: GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const FullScreenSlaytPage(),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const FullScreenSlaytPage(),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                      );
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: const EdgeInsets.all(8),
-                      child: const Icon(
-                        Icons.fullscreen,
-                        color: Colors.white70,
-                        size: 28,
+                        padding: const EdgeInsets.all(8),
+                        child: const Icon(
+                          Icons.fullscreen,
+                          color: Colors.white70,
+                          size: 28,
+                        ),
                       ),
                     ),
                   ),
@@ -529,6 +534,8 @@ class _FullScreenSlaytPageState extends ConsumerState<FullScreenSlaytPage> {
       final path = settings.bgMusicPath!;
       if (path.startsWith('assets/')) {
         await _audioPlayer.setAsset(path);
+      } else if (kIsWeb) {
+        await _audioPlayer.setUrl(path);
       } else {
         await _audioPlayer.setFilePath(path);
       }
@@ -574,6 +581,7 @@ class _FullScreenSlaytPageState extends ConsumerState<FullScreenSlaytPage> {
       body: GestureDetector(
         onTap: _toggleOverlay,
         child: Stack(
+          clipBehavior: Clip.none,
           children: [
             // Slayt — tam ekran
             Positioned.fill(
@@ -595,18 +603,22 @@ class _FullScreenSlaytPageState extends ConsumerState<FullScreenSlaytPage> {
                   child: SafeArea(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
-                      child: GestureDetector(
-                        onTap: () => Navigator.of(context).pop(),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.6),
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                          padding: const EdgeInsets.all(10),
-                          child: const Icon(
-                            Icons.fullscreen_exit,
-                            color: Colors.white,
-                            size: 28,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(24),
+                          onTap: () => Navigator.of(context).pop(),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.6),
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            padding: const EdgeInsets.all(10),
+                            child: const Icon(
+                              Icons.fullscreen_exit,
+                              color: Colors.white,
+                              size: 28,
+                            ),
                           ),
                         ),
                       ),
@@ -629,18 +641,22 @@ class _FullScreenSlaytPageState extends ConsumerState<FullScreenSlaytPage> {
                     child: SafeArea(
                       child: Padding(
                         padding: const EdgeInsets.all(16),
-                        child: GestureDetector(
-                          onTap: _toggleMute,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.6),
-                              borderRadius: BorderRadius.circular(24),
-                            ),
-                            padding: const EdgeInsets.all(10),
-                            child: Icon(
-                              _isMuted ? Icons.volume_off : Icons.volume_up,
-                              color: Colors.white,
-                              size: 28,
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(24),
+                            onTap: _toggleMute,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.6),
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                              padding: const EdgeInsets.all(10),
+                              child: Icon(
+                                _isMuted ? Icons.volume_off : Icons.volume_up,
+                                color: Colors.white,
+                                size: 28,
+                              ),
                             ),
                           ),
                         ),

@@ -134,7 +134,9 @@ class AlertSettingsNotifier extends StateNotifier<AlertSettings> {
     await prefs.setString(_keySlideCategory, category);
     state = state.copyWith(slideCategory: category);
   }
+//
 
+  //
   void triggerRefresh() {
     state = state.copyWith(lastUpdate: DateTime.now().millisecondsSinceEpoch);
   }
