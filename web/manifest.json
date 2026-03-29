@@ -2,11 +2,11 @@
     "name": "tvaap_clean",
     "short_name": "tvaap_clean",
     "start_url": ".",
-    "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "display": "fullscreen",
+    "background_color": "#000000",
+    "theme_color": "#000000",
+    "description": "Ezan Vakti - Namaz Saatleri",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

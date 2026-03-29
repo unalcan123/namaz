@@ -255,6 +255,8 @@ class SlideSettingsPage extends ConsumerWidget {
     'besmele': 'Besmele',
     'namaz': 'Namaz Bilgileri',
     'ramazan': 'Ramazan',
+    'hakikat': 'Hakikat Damlaları',
+    'karisik': 'Karışık (Foto + Hakikat)',
     'Kullanıcı Foto': 'Benim Fotoğraflarım',
   };
 

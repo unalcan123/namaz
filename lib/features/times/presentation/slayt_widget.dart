@@ -1,18 +1,49 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data'; // ✅ gerekli
 import 'package:file_picker/file_picker.dart';
+import 'dart:typed_data'; // ✅ gerekli
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../settings/presentation/alert_settings_controller.dart';
+
+// ─────────────────────────────────────────────────────────
+// ✅ HAKİKAT DAMLALARI – VERİ MODELİ
+// ─────────────────────────────────────────────────────────
+class SlideItem {
+  final int image;
+  final String category;
+  final String title;
+  final String source;
+  final String date;
+  final String text;
+
+  SlideItem({
+    required this.image,
+    required this.category,
+    required this.title,
+    required this.source,
+    required this.date,
+    required this.text,
+  });
+
+  factory SlideItem.fromJson(Map<String, dynamic> json) {
+    return SlideItem(
+      image: json['image'] ?? 1,
+      category: json['category'] ?? '',
+      title: json['title'] ?? '',
+      source: json['source'] ?? '',
+      date: json['date'] ?? '',
+      text: json['text'] ?? '',
+    );
+  }
+}
 
 class SlaytWidget extends ConsumerStatefulWidget {
   final double height;
@@ -42,6 +73,7 @@ class SlaytWidget extends ConsumerStatefulWidget {
 class _SlaytWidgetState extends ConsumerState<SlaytWidget> {
   List<String> assetImages = [];
   List<String> userImages = [];
+  List<SlideItem> hakikatSlides = [];
   bool isLoading = true;
 
   int _initialPage = 0;
@@ -138,6 +170,7 @@ class _SlaytWidgetState extends ConsumerState<SlaytWidget> {
   }
 
   List<String> _getAllImages(String category) {
+    if (category == 'hakikat') return []; // hakikat slides use hakikatSlides list
     if (category == 'Kullanıcı Foto') return userImages;
     return [...assetImages, ...userImages];
   }
@@ -180,15 +213,40 @@ class _SlaytWidgetState extends ConsumerState<SlaytWidget> {
     if (!mounted) return;
     setState(() => isLoading = true);
 
-    if (category != 'Kullanıcı Foto') {
-      await _loadAssetImages(category);
-    } else {
+    if (category == 'hakikat') {
+      // Sadece hakikat slaytları yükle
       assetImages = [];
+      userImages = [];
+      await _loadHakikatSlides();
+    } else if (category == 'karisik') {
+      // Hem foto hem hakikat slaytları yükle
+      await _loadAssetImages('resim');
+      await _loadUserImages('resim');
+      await _loadHakikatSlides();
+    } else {
+      hakikatSlides = [];
+      if (category != 'Kullanıcı Foto') {
+        await _loadAssetImages(category);
+      } else {
+        assetImages = [];
+      }
+      await _loadUserImages(category);
     }
 
-    await _loadUserImages(category);
-
     if (mounted) setState(() => isLoading = false);
+  }
+
+  Future<void> _loadHakikatSlides() async {
+    try {
+      final jsonString =
+          await rootBundle.loadString('assets/data/slides.json');
+      final List<dynamic> jsonList = json.decode(jsonString);
+      final loaded = jsonList.map((e) => SlideItem.fromJson(e)).toList();
+      if (mounted) setState(() => hakikatSlides = loaded);
+    } catch (e) {
+      debugPrint('Hakikat slaytları yükleme hatası: $e');
+      if (mounted) setState(() => hakikatSlides = []);
+    }
   }
 
   Future<void> _loadAssetImages(String category) async {
@@ -271,16 +329,86 @@ class _SlaytWidgetState extends ConsumerState<SlaytWidget> {
     return FileImage(File(path));
   }
 
+  // ─────────────────────────────────────────────────────────
+  // ✅ KARİŞIK MOD: image + hakikat slide listesi oluştur
+  // ─────────────────────────────────────────────────────────
+  /// Karışık modda kullanılacak birleşik item sayısını döndür.
+  int _getMixedItemCount() {
+    return _getAllImages('karisik').length + hakikatSlides.length;
+  }
+
+  /// Karışık modda index'e göre widget döndür.
+  Widget _buildMixedItem(int index, double height) {
+    final images = _getAllImages('karisik');
+    // Strateji: sırayla image, hakikat, image, hakikat ...
+    // Image listesi ve hakikat listesi iç içe geçirilir.
+    final totalImages = images.length;
+    final totalHakikat = hakikatSlides.length;
+    final total = totalImages + totalHakikat;
+    if (total == 0) return const SizedBox.shrink();
+
+    // Interleave: her 2-3 image slide arasına 1 hakikat koy
+    if (totalHakikat == 0) {
+      // Sadece image
+      final imgIdx = index % totalImages;
+      return _buildImageSlide(images[imgIdx], height);
+    }
+    if (totalImages == 0) {
+      // Sadece hakikat
+      final hIdx = index % totalHakikat;
+      return _HakikatSlideCard(item: hakikatSlides[hIdx]);
+    }
+
+    // Interleave: ratio'ya göre dağıt
+    final ratio = totalImages / totalHakikat;
+    final step = (ratio + 1).floor(); // her step adımda 1 hakikat
+    if (step > 0 && (index + 1) % (step + 1) == 0) {
+      // hakikat slide
+      final hIdx = (index ~/ (step + 1)) % totalHakikat;
+      return _HakikatSlideCard(item: hakikatSlides[hIdx]);
+    } else {
+      // image slide
+      final offset = index ~/ (step + 1); // kaç hakikat geçildi
+      final imgIdx = (index - offset) % totalImages;
+      return _buildImageSlide(images[imgIdx], height);
+    }
+  }
+
+  Widget _buildImageSlide(String imagePath, double height) {
+    return ClipRect(
+      child: SizedBox(
+        width: double.infinity,
+        height: height,
+        child: _SmartFittedImage(
+          provider: _getImageProvider(imagePath),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // ✅ Portrait’te slaytı gizle (geri sayım tek başına kalsın)
+    // ✅ Portrait'te slaytı gizle (geri sayım tek başına kalsın)
     final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
     if (widget.hideOnPortrait && isPortrait) {
       return const SizedBox.shrink();
     }
 
     final settings = ref.watch(alertSettingsProvider);
-    final allImages = _getAllImages(settings.slideCategory);
+    final category = settings.slideCategory;
+    final allImages = _getAllImages(category);
+    final isHakikat = category == 'hakikat';
+    final isKarisik = category == 'karisik';
+
+    // Toplam item sayısını belirle
+    int totalItems;
+    if (isHakikat) {
+      totalItems = hakikatSlides.length;
+    } else if (isKarisik) {
+      totalItems = _getMixedItemCount();
+    } else {
+      totalItems = allImages.length;
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -289,38 +417,35 @@ class _SlaytWidgetState extends ConsumerState<SlaytWidget> {
             : (widget.height > 0 ? widget.height : MediaQuery.sizeOf(context).height);
 
         final safeInitialPage =
-        (allImages.isNotEmpty && _initialPage < allImages.length) ? _initialPage : 0;
+        (totalItems > 0 && _initialPage < totalItems) ? _initialPage : 0;
 
         final Widget content;
 
         if (isLoading || !_initialPageLoaded) {
           content = const Center(
               child: CircularProgressIndicator(color: Colors.white));
-        } else if (allImages.isNotEmpty) {
+        } else if (totalItems > 0) {
           content = CarouselSlider.builder(
             key: ValueKey(
-              '${settings.slideCategory}_${settings.lastUpdate}_${allImages.length}_$safeInitialPage',
+              '${category}_${settings.lastUpdate}_${totalItems}_$safeInitialPage',
             ),
             carouselController: _carouselController,
-            itemCount: allImages.length,
+            itemCount: totalItems,
             itemBuilder: (context, index, realIdx) {
-              final imagePath = allImages[index];
-              return ClipRect(
-                child: SizedBox(
-                  width: double.infinity,
-                  height: actualHeight,
-                  child: _SmartFittedImage(
-                    provider: _getImageProvider(imagePath),
-                  ),
-                ),
-              );
+              if (isHakikat) {
+                return _HakikatSlideCard(item: hakikatSlides[index]);
+              } else if (isKarisik) {
+                return _buildMixedItem(index, actualHeight);
+              } else {
+                return _buildImageSlide(allImages[index], actualHeight);
+              }
             },
             options: CarouselOptions(
               height: actualHeight,
               viewportFraction: 1.0,
               initialPage: safeInitialPage,
               enlargeCenterPage: false,
-              autoPlay: allImages.length > 1,
+              autoPlay: totalItems > 1,
               autoPlayInterval: Duration(
                 seconds: settings.slideDuration > 0
                     ? settings.slideDuration
@@ -331,7 +456,7 @@ class _SlaytWidgetState extends ConsumerState<SlaytWidget> {
               scrollPhysics: const NeverScrollableScrollPhysics(),
               onPageChanged: (i, reason) {
                 widget.onPageChanged?.call(i);
-                _saveLastPage(settings.slideCategory, i);
+                _saveLastPage(category, i);
               },
             ),
           );
@@ -344,7 +469,7 @@ class _SlaytWidgetState extends ConsumerState<SlaytWidget> {
                     color: Colors.white24, size: 48),
                 const SizedBox(height: 8),
                 Text(
-                  "Görsel bulunamadı: ${settings.slideCategory}",
+                  "Görsel bulunamadı: $category",
                   style: const TextStyle(color: Colors.white38),
                 ),
               ],
@@ -361,7 +486,7 @@ class _SlaytWidgetState extends ConsumerState<SlaytWidget> {
             children: [
               Positioned.fill(child: content),
               // ✅ Tam ekran butonu
-              if (widget.showFullscreenButton && allImages.isNotEmpty && !isLoading)
+              if (widget.showFullscreenButton && totalItems > 0 && !isLoading)
                 Positioned(
                   right: 12,
                   bottom: 12,
@@ -490,7 +615,130 @@ class _SmartFittedImageState extends State<_SmartFittedImage> {
       },
     );
   }
+}
+
+
+// ─────────────────────────────────────────────────────────
+// ✅ HAKİKAT DAMLALARI SLIDE KARTI
+// ─────────────────────────────────────────────────────────
+class _HakikatSlideCard extends StatelessWidget {
+  final SlideItem item;
+
+  const _HakikatSlideCard({required this.item});
+
+  double _calculateFontSize(String text, BoxConstraints constraints) {
+    final length = text.length;
+    // Ekran yüksekliğine göre ölçekle
+    final hFactor = (constraints.maxHeight / 700).clamp(0.6, 1.4);
+
+    double base;
+    if (length <= 60) {
+      base = 34;
+    } else if (length <= 110) {
+      base = 30;
+    } else if (length <= 180) {
+      base = 27;
+    } else if (length <= 260) {
+      base = 24;
+    } else {
+      base = 21;
+    }
+    return base * hFactor;
   }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final textFontSize = _calculateFontSize(item.text, constraints);
+        final isSmall = constraints.maxHeight < 400;
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // Arka plan resmi
+            Image.asset(
+              'assets/images/backgrounds/img_${item.image}.jpg',
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  color: Colors.grey.shade900,
+                  alignment: Alignment.center,
+                  child: Text(
+                    'Resim bulunamadı:\nimg_${item.image}.jpg',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 18, color: Colors.white),
+                  ),
+                );
+              },
+            ),
+
+            // Gradient overlay (readability)
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0x99000000),
+                    Color(0x44000000),
+                    Color(0xCC000000),
+                  ],
+                ),
+              ),
+            ),
+
+            // İçerik
+            SafeArea(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  isSmall ? 24 : 48,
+                  isSmall ? 16 : 34,
+                  isSmall ? 24 : 48,
+                  isSmall ? 16 : 34,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Spacer(),
+                    // Ana metin kutusu
+                    Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isSmall ? 16 : 28,
+                        vertical: isSmall ? 14 : 26,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.38),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: Colors.white24),
+                      ),
+                      child: Text(
+                        item.text,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: textFontSize,
+                          height: 1.45,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
+                        ),
+                        maxLines: isSmall ? 5 : 8,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    SizedBox(height: isSmall ? 8 : 18),
+                    // Alt bilgi
+
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
 
 
 // ─────────────────────────────────────────────────────────
@@ -507,51 +755,59 @@ class FullScreenSlaytPage extends ConsumerStatefulWidget {
 
 class _FullScreenSlaytPageState extends ConsumerState<FullScreenSlaytPage> {
   bool _showOverlay = true;
-  final AudioPlayer _audioPlayer = AudioPlayer();
-  bool _isMuted = false;
-  bool _musicLoaded = false;
 
   @override
   void initState() {
     super.initState();
-    // Tam ekran immersive mod (oryantasyon serbest)
+    // Tam ekran immersive mod (native & web)
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+
+    // ✅ Web'de JavaScript Fullscreen API çağır
+    if (kIsWeb) {
+      _enterWebFullscreen();
+    }
 
     // 3 saniye sonra overlay'i gizle
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) setState(() => _showOverlay = false);
     });
-
-    // Arka plan müziğini başlat
-    _initMusic();
   }
 
-  Future<void> _initMusic() async {
-    final settings = ref.read(alertSettingsProvider);
-    if (!settings.bgMusicEnabled || settings.bgMusicPath == null) return;
-
+  /// Web Fullscreen API — adres çubuğunu tamamen gizler
+  void _enterWebFullscreen() {
     try {
-      final path = settings.bgMusicPath!;
-      if (path.startsWith('assets/')) {
-        await _audioPlayer.setAsset(path);
-      } else if (kIsWeb) {
-        await _audioPlayer.setUrl(path);
-      } else {
-        await _audioPlayer.setFilePath(path);
-      }
-      _audioPlayer.setLoopMode(LoopMode.all);
-      _audioPlayer.setVolume(1.0);
-      await _audioPlayer.play();
-      if (mounted) setState(() => _musicLoaded = true);
+      // dart:js_interop kullanmadan, services üzerinden çağırabiliriz
+      // Ama en basit yol: HTML element requestFullscreen
+      _callJsFullscreen(true);
     } catch (e) {
-      debugPrint('Arka plan müzik hatası: $e');
+      debugPrint('Web fullscreen hatası: $e');
+    }
+  }
+
+  void _exitWebFullscreen() {
+    try {
+      _callJsFullscreen(false);
+    } catch (e) {
+      debugPrint('Web exitFullscreen hatası: $e');
+    }
+  }
+
+  /// Platform-safe JS fullscreen call
+  void _callJsFullscreen(bool enter) {
+    // Bu işlem web_fullscreen_stub.dart / web_fullscreen_web.dart ile yapılır
+    // Ama basit çözüm: sadece SystemChrome kullan (Flutter web'de de çalışır)
+    if (enter) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    } else {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
   }
 
   @override
   void dispose() {
-    _audioPlayer.stop();
-    _audioPlayer.dispose();
+    if (kIsWeb) {
+      _exitWebFullscreen();
+    }
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
@@ -563,13 +819,6 @@ class _FullScreenSlaytPageState extends ConsumerState<FullScreenSlaytPage> {
         if (mounted) setState(() => _showOverlay = false);
       });
     }
-  }
-
-  void _toggleMute() {
-    setState(() {
-      _isMuted = !_isMuted;
-      _audioPlayer.setVolume(_isMuted ? 0.0 : 1.0);
-    });
   }
 
   @override
@@ -627,48 +876,9 @@ class _FullScreenSlaytPageState extends ConsumerState<FullScreenSlaytPage> {
                 ),
               ),
             ),
-
-            // Müzik mute/unmute butonu (sol alt)
-            if (ref.watch(alertSettingsProvider).bgMusicEnabled)
-              Positioned(
-                bottom: 0,
-                left: 0,
-                child: AnimatedOpacity(
-                  opacity: _showOverlay ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 300),
-                  child: IgnorePointer(
-                    ignoring: !_showOverlay,
-                    child: SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(24),
-                            onTap: _toggleMute,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.6),
-                                borderRadius: BorderRadius.circular(24),
-                              ),
-                              padding: const EdgeInsets.all(10),
-                              child: Icon(
-                                _isMuted ? Icons.volume_off : Icons.volume_up,
-                                color: Colors.white,
-                                size: 28,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
     );
   }
 }
-

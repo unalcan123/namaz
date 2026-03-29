@@ -8,21 +8,21 @@ const Map<int, String> preNotificationAssets = {
   10: 'assets/audio/dakikakivaruyarisisesi_10.mp3',
 };
 
+/// Varsayılan arka plan müziği
+const String defaultBgMusicPath = 'assets/music/Video download (1).mp3';
+
 class AlertSettings {
   final Map<String, bool> prayerAlarms;
   final AlertType alertType;
   final List<String> customAudioPaths;
-  final String? selectedCustomAudioPath; 
+  final String? selectedCustomAudioPath;
   final Map<int, bool> preNotifications;
-  final int slideDuration; 
-  final String slideCategory; 
-  final int lastUpdate; 
+  final int slideDuration;
+  final String slideCategory;
+  final int lastUpdate;
   final Map<String, String> userCategories;
   final String? bgMusicPath;
   final bool bgMusicEnabled;
-  // AlertSettings içine ekle
-  final List<String> bgMusicPaths; // ✅ çoklu
-// Eski bgMusicPath'i istersen geriye uyumluluk için tutabilirsin ama artık gerek yok.
 
   AlertSettings({
     Map<String, bool>? prayerAlarms,
@@ -33,12 +33,9 @@ class AlertSettings {
     this.slideDuration = 15,
     this.slideCategory = 'resim',
     this.lastUpdate = 0,
-
-    this.bgMusicPaths = const [],
-
     this.userCategories = const {},
-    this.bgMusicPath,
-    this.bgMusicEnabled = false,
+    this.bgMusicPath = defaultBgMusicPath,
+    this.bgMusicEnabled = true,
   })  : prayerAlarms = prayerAlarms ?? {for (var v in prayerNames) v: false},
         preNotifications = preNotifications ?? {for (var m in preNotificationMinutes) m: false};
 

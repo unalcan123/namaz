@@ -54,8 +54,8 @@ class AlertSettingsNotifier extends StateNotifier<AlertSettings> {
       slideDuration: prefs.getInt(_keySlideDuration) ?? 15,
       slideCategory: prefs.getString(_keySlideCategory) ?? 'resim',
       userCategories: userCats,
-      bgMusicPath: prefs.getString(_keyBgMusicPath),
-      bgMusicEnabled: prefs.getBool(_keyBgMusicEnabled) ?? false,
+      bgMusicPath: prefs.getString(_keyBgMusicPath) ?? defaultBgMusicPath,
+      bgMusicEnabled: prefs.getBool(_keyBgMusicEnabled) ?? true,
     );
   }
 
